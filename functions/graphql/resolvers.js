@@ -47,8 +47,6 @@ const resolvers = {
         response.book = bookDoc.data();
         response.book.id = bookDoc.id;
         response.wordsCount = response.words.length;
-        // implement word count
-        // item.book = item.book.get().then((book) => book.data());
         return response;
       });
     },
