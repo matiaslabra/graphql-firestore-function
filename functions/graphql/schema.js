@@ -4,14 +4,29 @@ const { gql } = require('apollo-server-cloud-functions');
 const schema = gql`
   schema {
     query: Query
+    mutation: Mutation
   }
 
   type Query {
-    user(id: ID!): User
+    user(userId: ID!): User
     list(id: ID!): List
     book(id: ID!): Book
+    word(id: ID!): Word
+    booksByTitle(query: String!): [Book!]
     # allWords: [Word]
     # wordsInList(listId: ID!): [Word]
+  }
+
+  type Mutation {
+    createNewBook(book: BookInput!, userId: ID!): Book!
+    addWordToList(word: String!, listId: ID!, userId: ID!): Word!
+  }
+
+  input BookInput {
+    author: String!
+    title: String!
+    chapters: Int!
+    isbn: String
   }
 
   type User {
@@ -24,10 +39,11 @@ const schema = gql`
   type Book {
     id: ID!
     author: String!
-    name: String!
+    title: String!
     lists: [List]
     chapters: Int!
     description: String!
+    isbn: String
   }
 
   type List {
@@ -42,10 +58,13 @@ const schema = gql`
   type Word {
     id: ID!
     word: String!
+    def: [WordDefinition]!
+    phonetic: String!
+  }
+  type WordDefinition {
     definition: String!
-    pronunciation: String!
-    syllables: Syllables
-    list: [String]!
+    example: String!
+    phonetic: [String]!
   }
 
   type Syllables {
