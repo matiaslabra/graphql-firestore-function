@@ -13,20 +13,34 @@ const schema = gql`
     book(id: ID!): Book
     word(id: ID!): Word
     booksByTitle(query: String!): [Book!]
-    # allWords: [Word]
-    # wordsInList(listId: ID!): [Word]
   }
 
   type Mutation {
     createNewBook(book: BookInput!, userId: ID!): Book!
+    createNewList(list: ListInput!): List!
     addWordToList(word: String!, listId: ID!, userId: ID!): Word!
+    addListToBook(chapterType: String!, listId: ID!, userId: ID!): List!
+  }
+
+  enum ListType {
+    INTRODUCTION
+    PROLOGUE
+    CHAPTER
+    EPILOGUE
   }
 
   input BookInput {
     author: String!
     title: String!
-    chapters: Int!
-    isbn: String
+    olIDs: [String]
+    olCoverId: String
+  }
+
+  input ListInput {
+    bookId: ID!
+    userId: ID!
+    listName: String!
+    listType: ListType!
   }
 
   type User {
@@ -41,9 +55,10 @@ const schema = gql`
     author: String!
     title: String!
     lists: [List]
-    chapters: Int!
-    description: String!
-    isbn: String
+    chapters: Int
+    olIDs: [String]
+    olCoverId: String
+    userId: ID!
   }
 
   type List {
@@ -52,7 +67,8 @@ const schema = gql`
     user: ID!
     words: [Word]
     wordsCount: Int!
-    chapterNumber: Int!
+    name: String!
+    ListType: ListType!
   }
 
   type Word {
