@@ -26,7 +26,6 @@ const schema = gql`
     INTRODUCTION
     PROLOGUE
     CHAPTER
-    EPILOGUE
   }
 
   input BookInput {
@@ -39,8 +38,9 @@ const schema = gql`
   input ListInput {
     bookId: ID!
     userId: ID!
-    listName: String!
-    listType: ListType!
+    name: String!
+    type: ListType!
+    chapterNumber: Int
   }
 
   type User {
@@ -64,11 +64,12 @@ const schema = gql`
   type List {
     id: ID!
     book: Book
-    user: ID!
+    userId: ID!
     words: [Word]
     wordsCount: Int!
     name: String!
-    ListType: ListType!
+    type: ListType!
+    chapterNumber: Int!
   }
 
   type Word {
