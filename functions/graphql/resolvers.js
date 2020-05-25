@@ -18,28 +18,41 @@ const dictionaryapi = `https://api.dictionaryapi.dev/api/v2/entries/`;
 const resolvers = {
   Mutation: {
     createNewBook: async (_, { userId, book }) => {
-      // console.log(params);
       const newBookRef = await db
         .collection('books')
-        .add({ ...book, user: userId });
+        .add({ user: userId, chapters: 0, ...book });
 
-      let listBatch = db.batch();
-      for (let chapter = 0; chapter <= book.chapters; chapter++) {
-        let newListRef = db.collection('lists').doc();
-        listBatch.set(newListRef, {
-          book: newBookRef.id,
-          chapterNumber: chapter,
-          user: userId,
-          words: [],
-        });
-      }
-
-      listBatch.commit();
       const userRef = await db.collection('users').doc(userId);
       await userRef.update({
         books: admin.firestore.FieldValue.arrayUnion(newBookRef),
       });
-      return { id: newBookRef.id };
+      return { id: newBookRef.id, olCoverId: book.olCoverId };
+    },
+    createNewList: async (_, { list }) => {
+      console.log(list);
+      let chapterNumber;
+      switch (list.type) {
+        case 'INTRODUCTION':
+          chapterNumber = -1;
+          break;
+        case 'PROLOGUE':
+          chapterNumber = 0;
+          break;
+        case 'CHAPTER':
+        default:
+          chapterNumber = list.chapterNumber;
+          break;
+      }
+      const userRef = await db.collection('users').doc(list.userId);
+
+      const newListRef = await db
+        .collection('lists')
+        .add({ user: userRef, chapterNumber, ...list, words: [] });
+
+      await userRef.update({
+        lists: admin.firestore.FieldValue.arrayUnion(newListRef),
+      });
+      return { id: newListRef.id };
     },
     addWordToList: async (_, { word, listId, userId }) => {
       //get word data from API
@@ -86,17 +99,21 @@ const resolvers = {
     booksByTitle: async (_, { query }) => {
       console.log(query);
       const response = await fetch(
-        `${openLibraryApiUrl}search.json?title=${query}`,
+        `${openLibraryApiUrl}search.json?q=${query}&mode=ebooks`,
       )
         .then((res) => res.json())
         .then((json) => json.docs);
       const data = response.reduce((acc, item) => {
-        acc.push({
+        let bookItem = {
           title: item.title,
           author: item.author_name ? item.author_name[0] : 'No author',
-          isbn: item.isbn ? item.isbn[0] : null,
-        });
+          olIDs: [],
+          olCoverId: item.cover_i ? item.cover_i : null,
+        };
+        if (item.lending_edition_s) bookItem.olIDs.push(item.lending_edition_s);
+        if (item.cover_edition_key) bookItem.olIDs.push(item.cover_edition_key);
 
+        acc.push(bookItem);
         return acc;
       }, []);
       return data;
@@ -141,21 +158,26 @@ const resolvers = {
       });
     },
     books: async (user) => {
-      return user.books.map(async (snap) => {
-        const item = await snap.get();
-        const response = item.data();
-        response.id = item.id;
-        return response;
-      });
+      if (user.books) {
+        return user.books.map(async (snap) => {
+          const item = await snap.get();
+          const response = item.data();
+          response.id = item.id;
+          return response;
+        });
+      }
+
+      return [];
     },
   },
   Book: {
     lists: async (book) => {
       const snap = await db
         .collection('lists')
-        .where('book', '==', book.id)
+        .where('bookId', '==', book.id)
         .orderBy('chapterNumber')
         .get();
+
       return snap.docs.map((snap) => {
         const response = snap.data();
         response.id = snap.id;
