@@ -8,7 +8,10 @@ const corsOptions = {
 };
 
 const app = server.createHandler({
-  cors: corsOptions,
+  cors: {
+    origin: '*',
+    credentials: false,
+  },
 });
 // Expose Express API as a single Cloud Function:
 exports.graphql = functions.https.onRequest(app);
