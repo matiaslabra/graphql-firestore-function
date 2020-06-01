@@ -12,7 +12,7 @@ const schema = gql`
     list(id: ID!): List
     book(id: ID!): Book
     word(id: ID!): Word
-    booksByTitle(query: String!): [Book!]
+    booksByTitle(query: String!): [BookApi!]
   }
 
   type Mutation {
@@ -20,6 +20,7 @@ const schema = gql`
     createNewList(list: ListInput!): List!
     addWordToList(word: String!, listId: ID!, userId: ID!): Word!
     addListToBook(chapterType: String!, listId: ID!, userId: ID!): List!
+    signInUser(uid: ID!): ID!
   }
 
   enum ListType {
@@ -48,6 +49,16 @@ const schema = gql`
     name: String!
     lists: [List]
     books: [Book]
+    booksAdded: [Book]
+  }
+
+  type BookApi {
+    author: String!
+    title: String!
+    olIDs: [String]
+    olCoverId: String
+    loading: Boolean!
+    added: Boolean!
   }
 
   type Book {

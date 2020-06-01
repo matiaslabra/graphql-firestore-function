@@ -1,36 +1,74 @@
 // Provide resolver functions for your schema fields
 const admin = require('firebase-admin');
-const serviceAccount = require('../../key.json');
+const functions = require('firebase-functions');
+const isProd = process.env.NODE_ENV === 'production';
+console.log('isProd', process.env.NODE_ENV);
+const serviceAccount = isProd
+  ? functions.config().service_account
+  : require('../../.runtimeconfig.json').service_account;
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: process.env.DB_HOST,
+  databaseURL: 'https://myvocab-fa620.firebaseio.com',
 });
 
 const fetch = require('node-fetch');
 const db = admin.firestore();
+const auth = admin.auth();
 
-const openLibraryApiUrl = `https://openlibrary.org/`;
-// const Wordnik = require('wordnik-as-promised');
-// const wn = new Wordnik('69cb40606211293cb7e81018c4d0b231e657a10ae78c924c9');
+const openLibraryAPIurl = `https://openlibrary.org/`;
 
-const dictionaryapi = `https://api.dictionaryapi.dev/api/v2/entries/`;
+const dictionaryAPIen = `https://api.dictionaryapi.dev/api/v2/entries/en/`;
 
 const resolvers = {
   Mutation: {
+    signInUser: async (_, { uid }) => {
+      const snap = await db.collection('users').doc(uid).get();
+      console.log(snap.exists);
+      if (snap.exists) return uid; //user already exist in db
+      const authUser = await auth.getUser(uid);
+      const userData = {
+        name: authUser.displayName,
+        email: authUser.email,
+        photoUrl: authUser.photoURL,
+        creationTime: authUser.metadata.creationTime,
+        booksID: [],
+      };
+      db.collection('users').doc(uid).set(userData);
+      return uid;
+    },
     createNewBook: async (_, { userId, book }) => {
-      const newBookRef = await db
-        .collection('books')
-        .add({ user: userId, chapters: 0, ...book });
+      // :todo: check somehow if book already exists
+      let batch = db.batch();
 
-      const userRef = await db.collection('users').doc(userId);
+      const newBookRef = db.collection('books').doc();
+      batch.set(newBookRef, { user: userId, chapters: 0, ...book });
+      // getting bookShelf to add book data for book recommendation
+      const bookShelfRef = db.collection('shelf').doc('books');
+      batch.update(
+        bookShelfRef,
+        'books',
+        admin.firestore.FieldValue.arrayUnion({
+          id: newBookRef.id,
+          title: book.title,
+          author: book.author,
+          olCoverId: book.olCoverId,
+        }),
+      );
+
+      await batch.commit();
+      const userRef = db.collection('users').doc(userId);
       await userRef.update({
-        books: admin.firestore.FieldValue.arrayUnion(newBookRef),
+        booksRef: admin.firestore.FieldValue.arrayUnion(newBookRef),
+        booksID: admin.firestore.FieldValue.arrayUnion(newBookRef.id),
       });
+
       return { id: newBookRef.id, olCoverId: book.olCoverId };
     },
     createNewList: async (_, { list }) => {
-      console.log(list);
       let chapterNumber;
+
+      // :todo: refactor switch, move it to util function
+      // const chapterNumber = getChapterNumByListType(list.type);
       switch (list.type) {
         case 'INTRODUCTION':
           chapterNumber = -1;
@@ -50,65 +88,53 @@ const resolvers = {
         .add({ user: userRef, chapterNumber, ...list, words: [] });
 
       await userRef.update({
-        lists: admin.firestore.FieldValue.arrayUnion(newListRef),
+        listsRef: admin.firestore.FieldValue.arrayUnion(newListRef),
       });
       return { id: newListRef.id };
     },
     addWordToList: async (_, { word, listId, userId }) => {
-      //get word data from API
+      const wordResponse = await fetch(
+        `${dictionaryAPIen}${word}`,
+      ).then((res) => res.json());
+      const wordObject = {
+        word,
+        def: wordResponse
+          .slice(0, 3)
+          .map((def) => def.meanings[0].definitions[0]),
+        phonetic: wordResponse.map((word) => word.phonetic),
+      };
 
-      // console.log(word, listId, userId);
-      try {
-        const wordResponse = await fetch(
-          `${dictionaryapi}en/${word}`,
-        ).then((res) => res.json());
-        // const wordResponse = await wn
-        //   .definitions(word, {
-        //     limit: 3,
-        //   })
-        //   .then((res) => res);
-        // console.log(wordResponse);
-        const wordObject = {
-          word,
-          def: wordResponse
-            .slice(0, 3)
-            .map((def) => def.meanings[0].definitions[0]),
-          phonetic: wordResponse.map((word) => word.phonetic),
-        };
-        // console.log(wordObject);
+      const newWordRef = await db.collection('words').add(wordObject);
+      //updating list with the new word
+      const listRef = await db.collection('lists').doc(listId);
+      await listRef.update({
+        words: admin.firestore.FieldValue.arrayUnion(newWordRef),
+      });
 
-        const newWordRef = await db.collection('words').add(wordObject);
-        //updating list with the new word
-        const listRef = await db.collection('lists').doc(listId);
-        await listRef.update({
-          words: admin.firestore.FieldValue.arrayUnion(newWordRef),
-        });
-
-        //updating user's words with the new word
-        const userRef = await db.collection('users').doc(userId);
-        userRef.update({
-          words: admin.firestore.FieldValue.arrayUnion(newWordRef),
-        });
-        return { id: newWordRef.id };
-      } catch (error) {
-        console.error(error);
-      }
+      //updating user's words with the new word
+      const userRef = await db.collection('users').doc(userId);
+      userRef.update({
+        words: admin.firestore.FieldValue.arrayUnion(newWordRef),
+      });
+      return { id: newWordRef.id };
     },
   },
   Query: {
     booksByTitle: async (_, { query }) => {
-      console.log(query);
       const response = await fetch(
-        `${openLibraryApiUrl}search.json?q=${query}&mode=ebooks`,
+        `${openLibraryAPIurl}search.json?q=${query}&mode=ebooks`,
       )
         .then((res) => res.json())
         .then((json) => json.docs);
-      const data = response.reduce((acc, item) => {
-        let bookItem = {
+
+      return response.reduce((acc, item) => {
+        const bookItem = {
           title: item.title,
           author: item.author_name ? item.author_name[0] : 'No author',
           olIDs: [],
           olCoverId: item.cover_i ? item.cover_i : null,
+          loading: false,
+          added: false,
         };
         if (item.lending_edition_s) bookItem.olIDs.push(item.lending_edition_s);
         if (item.cover_edition_key) bookItem.olIDs.push(item.cover_edition_key);
@@ -116,7 +142,6 @@ const resolvers = {
         acc.push(bookItem);
         return acc;
       }, []);
-      return data;
     },
     user: async (_, { userId }) => {
       const snap = await db.collection('users').doc(userId).get();
@@ -145,8 +170,20 @@ const resolvers = {
     },
   },
   User: {
+    booksAdded: async (user) => {
+      // user.booksID; // books already reading
+      // :todo: add pagination
+      const snap = await db.collection('shelf').doc('books').get();
+      const bookShelf = snap.data();
+      return bookShelf.books.reduce((acc, item) => {
+        console.log(item);
+        if (user.booksID.includes(item.id)) return acc;
+        acc.push(item);
+        return acc;
+      }, []);
+    },
     lists: async (user) => {
-      return user.lists.map(async (snap) => {
+      return user.listsRef.map(async (snap) => {
         const item = await snap.get();
         const response = item.data();
         response.id = item.id;
@@ -158,16 +195,14 @@ const resolvers = {
       });
     },
     books: async (user) => {
-      if (user.books) {
-        return user.books.map(async (snap) => {
-          const item = await snap.get();
-          const response = item.data();
-          response.id = item.id;
-          return response;
-        });
-      }
+      if (!user.booksRef) return [];
 
-      return [];
+      return user.booksRef.map(async (snap) => {
+        const item = await snap.get();
+        const response = item.data();
+        response.id = item.id;
+        return response;
+      });
     },
   },
   Book: {
@@ -188,7 +223,7 @@ const resolvers = {
   },
   List: {
     words: async (list) => {
-      // console.log(list);
+      if (!list.words) return [];
       return list.words.map(async (snap) => {
         const item = await snap.get();
         const response = item.data();
