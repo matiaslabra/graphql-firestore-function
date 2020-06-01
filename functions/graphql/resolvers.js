@@ -1,16 +1,5 @@
 // Provide resolver functions for your schema fields
 const admin = require('firebase-admin');
-const functions = require('firebase-functions');
-const isProd = process.env.NODE_ENV === 'production';
-console.log('isProd', process.env.NODE_ENV);
-const serviceAccount = isProd
-  ? functions.config().service_account
-  : require('../../.runtimeconfig.json').service_account;
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://myvocab-fa620.firebaseio.com',
-});
-
 const fetch = require('node-fetch');
 const db = admin.firestore();
 const auth = admin.auth();
