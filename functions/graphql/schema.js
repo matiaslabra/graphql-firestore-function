@@ -8,19 +8,23 @@ const schema = gql`
   }
 
   type Query {
-    user(userId: ID!): User
+    user: User
     list(id: ID!): List
     book(id: ID!): Book
     word(id: ID!): Word
-    booksByTitle(query: String!): [BookApi!]
+    olBooksByQuery(query: String!): [BookApi!]
+    algoBooksByQuery(query: String!): [BookSearch!]
+    newBooksAdded: [Book]
+    isUserFollowingBook(bookId: ID!): Boolean!
   }
 
   type Mutation {
-    createNewBook(book: BookInput!, userId: ID!): Book!
+    createNewBook(book: BookInput!): Book!
     createNewList(list: ListInput!): List!
-    addWordToList(word: String!, listId: ID!, userId: ID!): Word!
-    addListToBook(chapterType: String!, listId: ID!, userId: ID!): List!
+    addWordToList(word: String!, listId: ID!): Word!
+    addListToBook(chapterType: String!, listId: ID!): List!
     signInUser(uid: ID!): ID!
+    setUserFollowingBook(bookId: ID!, newState: Boolean!): Boolean!
   }
 
   enum ListType {
@@ -49,7 +53,6 @@ const schema = gql`
     name: String!
     lists: [List]
     books: [Book]
-    booksAdded: [Book]
   }
 
   type BookApi {
@@ -59,6 +62,12 @@ const schema = gql`
     olCoverId: String
     loading: Boolean!
     added: Boolean!
+  }
+  type BookSearch {
+    id: ID!
+    author: String!
+    title: String!
+    following: Boolean!
   }
 
   type Book {
