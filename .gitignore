@@ -8,6 +8,10 @@ firebase-debug.log*
 
 # Firebase cache
 .firebase/
+firestore_export
+firebase-export-metadata.json
+firestore.indexes.json
+firestore.rules
 
 # Firebase config
 # Uncomment this if you'd like others to create their own Firebase project.

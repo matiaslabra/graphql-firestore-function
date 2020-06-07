@@ -5,6 +5,10 @@
     ],
     "source": "functions"
   },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "hosting": {
     "public": "build",
     "ignore": [
@@ -12,5 +16,11 @@
       "**/.*",
       "**/node_modules/**"
     ]
+  },
+  "emulators": {
+    "firestore": {
+      "host": "localhost",
+      "port": "5000"
+    }
   }
 }
