@@ -53,9 +53,9 @@ const resolvers = {
       const batch = db.batch();
 
       const newBookRef = db.collection('books').doc();
-      batch.set(newBookRef, { user: context.user.uid, chapters: 0, ...book });
+      batch.set(newBookRef, { userId: context.user.uid, chapters: 0, ...book });
       // getting bookShelf to add book data for book recommendation
-      const bookShelfRef = db.collection('shelf').doc('books');
+      const bookShelfRef = db.collection('shelfs').doc('bookshelf');
       batch.update(
         bookShelfRef,
         'books',
@@ -97,38 +97,61 @@ const resolvers = {
 
       const newListRef = await db
         .collection('lists')
-        .add({ user: userRef, chapterNumber, ...list, words: [] });
+        .add({ userId: context.user.uid, chapterNumber, ...list, words: [] });
 
       await userRef.update({
         listsRef: admin.firestore.FieldValue.arrayUnion(newListRef),
       });
       return { id: newListRef.id };
     },
-    addWordToList: async (_, { word, listId }, context) => {
-      const wordResponse = await fetch(
-        `${dictionaryAPIen}${word}`,
-      ).then((res) => res.json());
-      const wordObject = {
-        word,
-        def: wordResponse
-          .slice(0, 3)
-          .map((def) => def.meanings[0].definitions[0]),
-        phonetic: wordResponse.map((word) => word.phonetic),
-      };
+    addWordToList: async (_, { word, position, listId }, context) => {
+      const lcWord = word.toLowerCase();
+      // check if word already exist in db
+      let wordObject, wordRef;
+      const wordShelfSnap = await db
+        .collection('shelfs')
+        .doc('wordshelf')
+        .collection('words')
+        .doc(lcWord)
+        .get();
 
-      const newWordRef = await db.collection('words').add(wordObject);
-      //updating list with the new word
+      if (wordShelfSnap.exists) {
+        const wordShelfData = wordShelfSnap.data();
+        wordShelfData.id; // ref id
+
+        wordRef = db.collection('words').doc(wordShelfData.id);
+
+        const wordSnap = await wordRef.get();
+        wordObject = wordSnap.data();
+      } else {
+        wordObject = await fetch(`${dictionaryAPIen}${lcWord}`).then((res) =>
+          res.json(),
+        );
+        wordRef = await db.collection('words').add(wordObject[0]);
+        // updating word shelf collection
+        await db
+          .collection('shelfs')
+          .doc('wordshelf')
+          .collection('words')
+          .doc(lcWord)
+          .create({ id: wordRef.id });
+      }
+
       const listRef = db.collection('lists').doc(listId);
       await listRef.update({
-        words: admin.firestore.FieldValue.arrayUnion(newWordRef),
+        words: admin.firestore.FieldValue.arrayUnion({
+          ref: wordRef,
+          position,
+        }),
       });
 
       //updating user's words with the new word
       const userRef = db.collection('users').doc(context.user.uid);
       userRef.update({
-        words: admin.firestore.FieldValue.arrayUnion(newWordRef),
+        words: admin.firestore.FieldValue.arrayUnion(wordRef),
       });
-      return { id: newWordRef.id };
+
+      return { id: wordRef.id };
     },
   },
   Query: {
@@ -183,7 +206,7 @@ const resolvers = {
       // :todo: add pagination
       const userSnap = await db.collection('users').doc(context.user.uid).get();
       const user = userSnap.data();
-      const shelfSnap = await db.collection('shelf').doc('books').get();
+      const shelfSnap = await db.collection('shelfs').doc('bookshelf').get();
       const bookShelf = shelfSnap.data();
       if (!bookShelf) return [];
       return bookShelf.books.reduce((acc, item) => {
@@ -191,6 +214,21 @@ const resolvers = {
         acc.push(item);
         return acc;
       }, []);
+    },
+    getWordDef: async (_, { word }) => {
+      // new word, look for definition in word API
+      const wordResponse = await fetch(
+        `${dictionaryAPIen}${word}`,
+      ).then((res) => res.json());
+
+      // word no founded, typo?
+      if (wordResponse.title === 'Word not found') return null; // https://www.apollographql.com/docs/apollo-server/data/errors ?
+      // shape
+      return {
+        word,
+        meanings: wordResponse[0].meanings,
+        phonetic: wordResponse[0].phonetic,
+      };
     },
     user: async (_, __, context) => {
       // console.log(context.user);
@@ -215,6 +253,7 @@ const resolvers = {
     word: async (_, { id }) => {
       const snap = await db.collection('words').doc(id).get();
       const data = snap.data();
+      console.log(data);
       data.id = snap.id;
       return data;
     },
@@ -262,11 +301,15 @@ const resolvers = {
   List: {
     words: async (list) => {
       if (!list.words) return [];
-      return list.words.map(async (snap) => {
-        const item = await snap.get();
+      return list.words.map(async (word) => {
+        const item = await word.ref.get();
         const response = item.data();
         response.id = item.id;
-        return response;
+        return {
+          ...response,
+          id: item.id,
+          position: word.position,
+        };
       });
     },
   },
