@@ -15,13 +15,14 @@ const schema = gql`
     olBooksByQuery(query: String!): [BookApi!]
     algoBooksByQuery(query: String!): [BookSearch!]
     newBooksAdded: [Book]
+    getWordDef(word: String!): WordApi
     isUserFollowingBook(bookId: ID!): Boolean!
   }
 
   type Mutation {
     createNewBook(book: BookInput!): Book!
     createNewList(list: ListInput!): List!
-    addWordToList(word: String!, listId: ID!): Word!
+    addWordToList(word: String!, listId: ID!, position: [Int!]!): Word
     addListToBook(chapterType: String!, listId: ID!): List!
     signInUser(uid: ID!): ID!
     setUserFollowingBook(bookId: ID!, newState: Boolean!): Boolean!
@@ -42,7 +43,6 @@ const schema = gql`
 
   input ListInput {
     bookId: ID!
-    userId: ID!
     name: String!
     type: ListType!
     chapterNumber: Int
@@ -95,13 +95,27 @@ const schema = gql`
   type Word {
     id: ID!
     word: String!
-    def: [WordDefinition]!
-    phonetic: String!
+    meanings: [WordMeaning]!
+    phonetic: String
+    position: [Int!]!
   }
+
+  type WordApi {
+    word: String!
+    meanings: [WordMeaning]!
+    phonetic: String
+  }
+
+  type WordMeaning {
+    definitions: [WordDefinition]
+    example: String
+    partOfSpeech: String
+  }
+
   type WordDefinition {
-    definition: String!
-    example: String!
-    phonetic: [String]!
+    synonyms: [String]
+    example: String
+    definition: String
   }
 
   type Syllables {
