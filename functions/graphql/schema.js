@@ -24,7 +24,8 @@ const schema = gql`
     createNewList(list: ListInput!): List!
     addWordToList(word: String!, listId: ID!, position: [Int!]!): Word
     addListToBook(chapterType: String!, listId: ID!): List!
-    signInUser(uid: ID!): ID!
+    signUpSocialUser(uid: ID!): ID!
+    signUpEmailUser(uid: ID!, name: String!): ID!
     setUserFollowingBook(bookId: ID!, newState: Boolean!): Boolean!
   }
 
@@ -43,7 +44,7 @@ const schema = gql`
 
   input ListInput {
     bookId: ID!
-    name: String!
+    name: String
     type: ListType!
     chapterNumber: Int
   }

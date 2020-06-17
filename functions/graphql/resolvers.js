@@ -33,7 +33,7 @@ const resolvers = {
       }
       return newState;
     },
-    signInUser: async (_, { uid }) => {
+    signUpSocialUser: async (_, { uid }) => {
       const snap = await db.collection('users').doc(uid).get();
       console.log(snap.exists);
       if (snap.exists) return uid; //user already exist in db
@@ -42,6 +42,21 @@ const resolvers = {
         name: authUser.displayName,
         email: authUser.email,
         photoUrl: authUser.photoURL,
+        creationTime: authUser.metadata.creationTime,
+        booksID: [],
+      };
+      db.collection('users').doc(uid).set(userData);
+      return uid;
+    },
+    signUpEmailUser: async (_, { uid, name }) => {
+      const snap = await db.collection('users').doc(uid).get();
+      if (snap.exists) return uid; //user already exist in db
+      const authUser = await auth.getUser(uid);
+
+      const userData = {
+        name,
+        email: authUser.email,
+        photoUrl: '',
         creationTime: authUser.metadata.creationTime,
         booksID: [],
       };
@@ -77,27 +92,34 @@ const resolvers = {
       return { id: newBookRef.id, olCoverId: book.olCoverId };
     },
     createNewList: async (_, { list }, context) => {
-      let chapterNumber;
+      let chapterNumber, listName;
 
       // :todo: refactor switch, move it to util function
       // const chapterNumber = getChapterNumByListType(list.type);
       switch (list.type) {
         case 'INTRODUCTION':
           chapterNumber = -1;
+          listName = 'Introduction';
           break;
         case 'PROLOGUE':
           chapterNumber = 0;
+          listName = 'Prologue';
           break;
         case 'CHAPTER':
         default:
           chapterNumber = list.chapterNumber;
+          listName = list.name || `Chapter ${chapterNumber}`;
           break;
       }
       const userRef = db.collection('users').doc(context.user.uid);
 
-      const newListRef = await db
-        .collection('lists')
-        .add({ userId: context.user.uid, chapterNumber, ...list, words: [] });
+      const newListRef = await db.collection('lists').add({
+        ...list,
+        userId: context.user.uid,
+        chapterNumber,
+        name: listName,
+        words: [],
+      });
 
       await userRef.update({
         listsRef: admin.firestore.FieldValue.arrayUnion(newListRef),
@@ -231,7 +253,7 @@ const resolvers = {
       };
     },
     user: async (_, __, context) => {
-      // console.log(context.user);
+      // console.log(context);
       const snap = await db.collection('users').doc(context.user.uid).get();
       const data = snap.data();
       data.id = context.user.uid;
