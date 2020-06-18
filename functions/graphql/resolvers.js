@@ -194,6 +194,7 @@ const resolvers = {
           title: item.title,
           author: item.author,
           id: item.objectID,
+          olCoverId: item.olCoverId,
           loading: false,
           following: user.booksID.includes(item.objectID),
         };

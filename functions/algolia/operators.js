@@ -5,6 +5,7 @@ async function saveDocumentInAlgolia(snapshot, collectionIndex) {
       const algoObj = {
         objectID: snapshot.id,
         title: book.title,
+        olCoverId: book.olCoverId,
         author: book.author,
       };
 

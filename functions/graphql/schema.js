@@ -69,6 +69,7 @@ const schema = gql`
     author: String!
     title: String!
     following: Boolean!
+    olCoverId: String
   }
 
   type Book {
