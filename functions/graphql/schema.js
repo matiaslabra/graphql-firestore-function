@@ -21,9 +21,12 @@ const schema = gql`
 
   type Mutation {
     createNewBook(book: BookInput!): Book!
+    deleteBook(id: ID!): Boolean!
+    deleteList(id: ID!): Boolean!
     createNewList(list: ListInput!): List!
+    editList(list: EditListInput!): Boolean!
     addWordToList(word: String!, listId: ID!, position: [Int!]!): Word
-    addListToBook(chapterType: String!, listId: ID!): List!
+    # addListToBook(type: String!, listId: ID!): List!
     signUpSocialUser(uid: ID!): ID!
     signUpEmailUser(uid: ID!, name: String!): ID!
     setUserFollowingBook(bookId: ID!, newState: Boolean!): Boolean!
@@ -46,7 +49,14 @@ const schema = gql`
     bookId: ID!
     name: String
     type: ListType!
-    chapterNumber: Int
+    listNumber: Int
+  }
+
+  input EditListInput {
+    id: ID!
+    name: String
+    type: ListType!
+    listNumber: Int
   }
 
   type User {
@@ -77,7 +87,6 @@ const schema = gql`
     author: String!
     title: String!
     lists: [List]
-    chapters: Int
     olIDs: [String]
     olCoverId: String
     userId: ID!
@@ -91,7 +100,7 @@ const schema = gql`
     wordsCount: Int!
     name: String!
     type: ListType!
-    chapterNumber: Int!
+    listNumber: Int!
   }
 
   type Word {

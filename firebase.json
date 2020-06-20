@@ -18,7 +18,11 @@
     ]
   },
   "emulators": {
-    "firestore": {
+    // "firestore": {
+    //   "host": "localhost",
+    //   "port": "5001"
+    // },
+    "functions": {
       "host": "localhost",
       "port": "5000"
     }

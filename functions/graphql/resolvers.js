@@ -68,7 +68,7 @@ const resolvers = {
       const batch = db.batch();
 
       const newBookRef = db.collection('books').doc();
-      batch.set(newBookRef, { userId: context.user.uid, chapters: 0, ...book });
+      batch.set(newBookRef, { userId: context.user.uid, ...book });
       // getting bookShelf to add book data for book recommendation
       const bookShelfRef = db.collection('shelfs').doc('bookshelf');
       batch.update(
@@ -91,24 +91,104 @@ const resolvers = {
 
       return { id: newBookRef.id, olCoverId: book.olCoverId };
     },
-    createNewList: async (_, { list }, context) => {
-      let chapterNumber, listName;
+    deleteBook: async (_, { id }, context) => {
+      const batch = db.batch();
+
+      const bookRef = db.collection('books').doc(id);
+      // getting bookShelf to remove book data for book shelfter
+      const bookShelfRef = db.collection('shelfs').doc('bookshelf');
+      const bookShelfSnap = await db
+        .collection('shelfs')
+        .doc('bookshelf')
+        .get();
+      const bookshelf = bookShelfSnap.data();
+      batch.update(
+        bookShelfRef,
+        'books',
+        admin.firestore.FieldValue.arrayRemove(
+          bookshelf.books.find((item) => item.id === id),
+        ),
+      );
+
+      const listsRef = await db
+        .collection('lists')
+        .where('bookId', '==', id)
+        .get();
+
+      listsRef.docs.forEach((snaps) => {
+        batch.delete(snaps.ref);
+      });
+
+      const userRef = db.collection('users').doc(context.user.uid);
+      batch.update(
+        userRef,
+        'booksRef',
+        admin.firestore.FieldValue.arrayRemove(bookRef),
+      );
+      batch.update(
+        userRef,
+        'booksID',
+        admin.firestore.FieldValue.arrayRemove(id),
+      );
+
+      batch.delete(bookRef);
+      return Boolean(await batch.commit());
+    },
+    deleteList: async (_, { id }, context) => {
+      const listRef = db.collection('lists').doc(id);
+
+      return Boolean(await listRef.delete());
+    },
+    editList: async (_, { list }, context) => {
+      let listNumber, listName;
 
       // :todo: refactor switch, move it to util function
-      // const chapterNumber = getChapterNumByListType(list.type);
+      // const listNumber = getChapterNumBytype(list.type);
       switch (list.type) {
         case 'INTRODUCTION':
-          chapterNumber = -1;
+          listNumber = -1;
           listName = 'Introduction';
           break;
         case 'PROLOGUE':
-          chapterNumber = 0;
+          listNumber = 0;
           listName = 'Prologue';
           break;
         case 'CHAPTER':
         default:
-          chapterNumber = list.chapterNumber;
-          listName = list.name || `Chapter ${chapterNumber}`;
+          listNumber = list.listNumber;
+          listName = list.name || `Chapter ${listNumber}`;
+          break;
+      }
+
+      const newListRef = db
+        .collection('lists')
+        .doc(list.id)
+        .update({
+          ...list,
+          listNumber,
+          name: listName,
+        });
+
+      return Boolean(await newListRef);
+    },
+    createNewList: async (_, { list }, context) => {
+      let listNumber, listName;
+
+      // :todo: refactor switch, move it to util function
+      // const listNumber = getChapterNumBytype(list.type);
+      switch (list.type) {
+        case 'INTRODUCTION':
+          listNumber = -1;
+          listName = 'Introduction';
+          break;
+        case 'PROLOGUE':
+          listNumber = 0;
+          listName = 'Prologue';
+          break;
+        case 'CHAPTER':
+        default:
+          listNumber = list.listNumber;
+          listName = list.name || `Chapter ${listNumber}`;
           break;
       }
       const userRef = db.collection('users').doc(context.user.uid);
@@ -116,7 +196,7 @@ const resolvers = {
       const newListRef = await db.collection('lists').add({
         ...list,
         userId: context.user.uid,
-        chapterNumber,
+        listNumber,
         name: listName,
         words: [],
       });
@@ -167,10 +247,13 @@ const resolvers = {
         }),
       });
 
-      //updating user's words with the new word
+      //updating user's words with the new word and position
       const userRef = db.collection('users').doc(context.user.uid);
       userRef.update({
-        words: admin.firestore.FieldValue.arrayUnion(wordRef),
+        words: admin.firestore.FieldValue.arrayUnion({
+          ref: wordRef,
+          position,
+        }),
       });
 
       return { id: wordRef.id };
@@ -245,7 +328,7 @@ const resolvers = {
       ).then((res) => res.json());
 
       // word no founded, typo?
-      if (wordResponse.title === 'Word not found') return null; // https://www.apollographql.com/docs/apollo-server/data/errors ?
+      if (wordResponse.title === 'No Definitions Found') return null; // https://www.apollographql.com/docs/apollo-server/data/errors ?
       // shape
       return {
         word,
@@ -310,7 +393,7 @@ const resolvers = {
       const snap = await db
         .collection('lists')
         .where('bookId', '==', book.id)
-        .orderBy('chapterNumber')
+        .orderBy('listNumber')
         .get();
 
       return snap.docs.map((snap) => {
